@@ -1,0 +1,104 @@
+import static org.mockito.Mockito.*;
+import javax.jms.BytesMessage;
+import javax.jms.JMSException;
+import javax.jms.Message;
+import org.junit.*;
+import org.mockito.*;
+import java.util.Date;
+
+public class JMSListenerTest {
+
+    @Mock
+    Message message;
+
+    @Mock
+    BytesMessage bytesMessage;
+
+    @Mock
+    TestDAO testDAO;
+
+    @InjectMocks
+    JMSListener jmsListener;
+
+    @Before
+    public void setup() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    public void testOnMessage_Success() throws JMSException {
+        // Setup
+        long timestamp = System.currentTimeMillis();
+        when(message.getJMSTimestamp()).thenReturn(timestamp);
+        when(message instanceof BytesMessage).thenReturn(true);
+        when((BytesMessage)message).thenReturn(bytesMessage);
+        when(bytesMessage.getBodyLength()).thenReturn(10L);
+        when(message.getStringProperty("CHARSET")).thenReturn("UTF-8");
+        byte[] textBytes = "Test message".getBytes("UTF-8");
+        bytesMessage.writeBytes(textBytes);
+
+        // Execute
+        jmsListener.onMessage(message);
+
+        // Verify
+        verify(message, atLeastOnce()).getJMSTimestamp();
+        verify(message, atLeastOnce()).instanceof(BytesMessage.class);
+        verify(bytesMessage, atLeastOnce()).getBodyLength();
+        verify(bytesMessage, atLeastOnce()).readBytes(any(byte[].class), eq(10));
+        verify(message, atLeastOnce()).getStringProperty("CHARSET");
+        verify(testDAO, atLeastOnce()).persistMessage(eq("Test message"), any(), any(), eq("tests"));
+    }
+
+    @Test
+    public void testOnMessage_InvalidMessageType() throws JMSException {
+        // Setup
+        when(message.getJMSTimestamp()).thenReturn(System.currentTimeMillis());
+        when(message instanceof BytesMessage).thenReturn(false);
+
+        // Execute
+        jmsListener.onMessage(message);
+
+        // Verify
+        verify(message, atLeastOnce()).getJMSTimestamp();
+        verify(message, atLeastOnce()).instanceof(BytesMessage.class);
+        verifyZeroInteractions(testDAO);
+    }
+
+    @Test
+    public void testOnMessage_JMSException() throws JMSException {
+        // Setup
+        when(message.getJMSTimestamp()).thenThrow(new JMSException("Error"));
+
+        // Execute
+        try {
+            jmsListener.onMessage(message);
+            fail("Expected exception not thrown");
+        } catch (Exception e) {
+            // Verify
+            verify(message, atLeastOnce()).getJMSTimestamp();
+            verifyZeroInteractions(testDAO);
+        }
+    }
+
+    @Test
+    public void testOnMessage_NullCharset() throws JMSException {
+        // Setup
+        long timestamp = System.currentTimeMillis();
+        when(message.getJMSTimestamp()).thenReturn(timestamp);
+        when(message instanceof BytesMessage).thenReturn(true);
+        when((BytesMessage)message).thenReturn(bytesMessage);
+        when(bytesMessage.getBodyLength()).thenReturn(10L);
+        when(message.getStringProperty("CHARSET")).thenReturn(null);
+
+        // Execute
+        try {
+            jmsListener.onMessage(message);
+            fail("Expected exception not thrown");
+        } catch (Exception e) {
+            // Verify
+            verify(message, atLeastOnce()).getJMSTimestamp();
+            verify(message, atLeastOnce()).instanceof(BytesMessage.class);
+            verifyZeroInteractions(testDAO);
+        }
+    }
+}
