@@ -1,34 +1,50 @@
+import org.springframework.jdbc.core.ResultSetExtractor;
+
+import java.lang.reflect.Field;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-public class ResultSetMapper {
-    
-    public static <T> List<T> mapResultSetToObject(ResultSet rs, Class<T> outputClass) throws Exception {
-        List<T> outputList = new ArrayList<>();
+public class GenericResultSetExtractor<T> implements ResultSetExtractor<List<T>> {
 
-        if (rs != null) {
-            ResultSetMetaData rsmd = rs.getMetaData();
-            int columnCount = rsmd.getColumnCount();
+    private final Class<T> type;
+
+    public GenericResultSetExtractor(Class<T> type) {
+        this.type = type;
+    }
+
+    @Override
+    public List<T> extractData(ResultSet rs) throws SQLException {
+        List<T> results = new ArrayList<>();
+        try {
+            ResultSetMetaData metaData = rs.getMetaData();
+            int columnCount = metaData.getColumnCount();
+            Map<String, Field> fieldMap = new HashMap<>();
+
+            for (Field field : type.getDeclaredFields()) {
+                field.setAccessible(true);
+                fieldMap.put(field.getName().toLowerCase(), field);
+            }
 
             while (rs.next()) {
-                T bean = outputClass.getDeclaredConstructor().newInstance();
-
+                T instance = type.newInstance();
                 for (int i = 1; i <= columnCount; i++) {
-                    String columnName = rsmd.getColumnLabel(i);
-                    Object columnValue = rs.getObject(i);
-
-                    // Using reflection to set the field in the DTO
-                    var field = outputClass.getDeclaredField(columnName);
-                    field.setAccessible(true);
-                    field.set(bean, columnValue);
+                    String columnName = metaData.getColumnName(i).toLowerCase();
+                    Field field = fieldMap.get(columnName);
+                    if (field != null) {
+                        Object value = rs.getObject(i);
+                        field.set(instance, value);
+                    }
                 }
-
-                outputList.add(bean);
+                results.add(instance);
             }
+        } catch (InstantiationException | IllegalAccessException e) {
+            throw new SQLException("Failed to map result set to type " + type.getName(), e);
         }
-
-        return outputList;
+        return results;
     }
 }
