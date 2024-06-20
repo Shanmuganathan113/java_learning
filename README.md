@@ -1,39 +1,39 @@
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProviderBuilder;
+import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.DefaultReactiveOAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.web.reactive.function.client.ServletOAuth2AuthorizedClientExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.netty.http.client.HttpClient;
-
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManagerFactory;
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.security.KeyStore;
 
 @Configuration
 public class WebClientConfig {
 
     @Bean
-    public WebClient webClient() throws Exception {
-        // Load the truststore
-        KeyStore trustStore = KeyStore.getInstance("JKS");
-        try (InputStream trustStoreStream = new FileInputStream("path/to/truststore.jks")) {
-            trustStore.load(trustStoreStream, "changeit".toCharArray());
-        }
-
-        TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        trustManagerFactory.init(trustStore);
-
-        // Initialize SSL context
-        SSLContext sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(null, trustManagerFactory.getTrustManagers(), new java.security.SecureRandom());
-
-        HttpClient httpClient = HttpClient.create()
-                .secure(sslContextSpec -> sslContextSpec.sslContext(sslContext));
-
+    public WebClient webClient(ClientRegistrationRepository clientRegistrationRepository,
+                               OAuth2AuthorizedClientManager authorizedClientManager) {
+        ServletOAuth2AuthorizedClientExchangeFilterFunction oauth2Client = 
+            new ServletOAuth2AuthorizedClientExchangeFilterFunction(authorizedClientManager);
         return WebClient.builder()
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .baseUrl("https://test.dev.net") // Replace with your server URL
+                .apply(oauth2Client.oauth2Configuration())
+                .baseUrl("https://api.example.com")
                 .build();
+    }
+
+    @Bean
+    public ReactiveOAuth2AuthorizedClientManager authorizedClientManager(
+            ClientRegistrationRepository clientRegistrationRepository) {
+        OAuth2AuthorizedClientProvider authorizedClientProvider =
+                OAuth2AuthorizedClientProviderBuilder.builder()
+                        .clientCredentials()
+                        .build();
+        DefaultReactiveOAuth2AuthorizedClientManager authorizedClientManager =
+                new DefaultReactiveOAuth2AuthorizedClientManager(
+                        clientRegistrationRepository, authorizedClientProvider);
+        return authorizedClientManager;
     }
 }
