@@ -1,46 +1,39 @@
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.netty.http.client.HttpClient;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.security.KeyStore;
 
-public class ParseYamlWithoutDto {
-    public static void main(String[] args) {
-        String yamlFilePath = "path/to/your/input.yml";
+@Configuration
+public class WebClientConfig {
 
-        // Create an ObjectMapper for YAML
-        ObjectMapper yamlReader = new ObjectMapper(new YAMLFactory());
-
-        try {
-            // Read YAML file and convert to JsonNode
-            JsonNode rootNode = yamlReader.readTree(new File(yamlFilePath));
-
-            // Create a map to store origin values with filenames as keys
-            Map<String, String> origins = new HashMap<>();
-
-            // Iterate through the YAML structure
-            Iterator<JsonNode> fileDataIterator = rootNode.elements();
-            while (fileDataIterator.hasNext()) {
-                JsonNode fileDataNode = fileDataIterator.next();
-                String fileName = fileDataNode.path("FileName").asText();
-
-                JsonNode detailsNode = fileDataNode.path("details");
-                Iterator<JsonNode> detailsIterator = detailsNode.elements();
-                while (detailsIterator.hasNext()) {
-                    JsonNode detailNode = detailsIterator.next();
-                    String origin = detailNode.path("ORIGIN").asText();
-                    origins.put(fileName, origin);
-                }
-            }
-
-            // Print the origin values
-            origins.forEach((key, value) -> System.out.println("FileName: " + key + ", Origin: " + value));
-        } catch (IOException e) {
-            e.printStackTrace();
+    @Bean
+    public WebClient webClient() throws Exception {
+        // Load the truststore
+        KeyStore trustStore = KeyStore.getInstance("JKS");
+        try (InputStream trustStoreStream = new FileInputStream("path/to/truststore.jks")) {
+            trustStore.load(trustStoreStream, "changeit".toCharArray());
         }
+
+        TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        trustManagerFactory.init(trustStore);
+
+        // Initialize SSL context
+        SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, trustManagerFactory.getTrustManagers(), new java.security.SecureRandom());
+
+        HttpClient httpClient = HttpClient.create()
+                .secure(sslContextSpec -> sslContextSpec.sslContext(sslContext));
+
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .baseUrl("https://test.dev.net") // Replace with your server URL
+                .build();
     }
 }
