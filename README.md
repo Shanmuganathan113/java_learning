@@ -1,23 +1,31 @@
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
+import reactor.netty.tcp.SslContextSpec;
+import reactor.netty.tcp.TcpClient;
 
-@Service
-public class ApiService {
+import javax.net.ssl.SSLException;
+import java.io.IOException;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
 
-    private static final String API_KEY_HEADER = "X-API-KEY";
-    private static final String API_KEY = "your-secret-api-key";
-    private static final String BASE_URL = "http://localhost:8080/api"; // Change to your base URL
+@Component
+public class WebClientConfig {
 
-    @Autowired
-    private WebClient webClient;
+    public WebClient createWebClient() throws SSLException, CertificateException, NoSuchAlgorithmException, KeyStoreException, IOException, KeyManagementException {
+        KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
+        trustStore.load(new ClassPathResource("truststore.jks").getInputStream(), "changeit".toCharArray());
 
-    public Mono<String> getSecuredData() {
-        return webClient.get()
-                .uri(BASE_URL + "/data")
-                .header(API_KEY_HEADER, API_KEY)
-                .retrieve()
-                .bodyToMono(String.class);
+        SslContextSpec sslContextSpec = SslContextSpec.forClient().trustManager(trustStore);
+
+        HttpClient httpClient = HttpClient.create().secure(sslContextSpec);
+
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
     }
 }
