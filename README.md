@@ -1,81 +1,23 @@
-import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient;
-import org.apache.hc.client5.http.impl.async.HttpAsyncClients;
-import org.apache.hc.core5.ssl.SSLContextBuilder;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.Resource;
-import org.springframework.security.oauth2.client.AuthorizedClientServiceReactiveOAuth2AuthorizedClientManager;
-import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider;
-import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProviderBuilder;
-import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientManager;
-import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
-import org.springframework.security.oauth2.client.web.reactive.function.client.ServerOAuth2AuthorizedClientExchangeFilterFunction;
-import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientRepository;
-import org.springframework.security.oauth2.client.web.server.WebSessionServerOAuth2AuthorizedClientRepository;
-import org.springframework.web.reactive.function.client.ExchangeStrategies;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
-import javax.net.ssl.SSLContext;
-import java.security.KeyStore;
+@Service
+public class ApiService {
 
-@Configuration
-public class WebClientConfig {
+    private static final String API_KEY_HEADER = "X-API-KEY";
+    private static final String API_KEY = "your-secret-api-key";
+    private static final String BASE_URL = "http://localhost:8080/api"; // Change to your base URL
 
-    @Value("${truststore.path}")
-    private Resource truststorePath;
+    @Autowired
+    private WebClient webClient;
 
-    @Value("${truststore.password}")
-    private String truststorePassword;
-
-    @Bean
-    public WebClient webClient(ReactiveOAuth2AuthorizedClientManager authorizedClientManager) throws Exception {
-        SSLContext sslContext = SSLContextBuilder.create()
-                .loadTrustMaterial(truststorePath.getURL(), truststorePassword.toCharArray())
-                .build();
-
-        CloseableHttpAsyncClient httpAsyncClient = HttpAsyncClients.custom()
-                .setSSLContext(sslContext)
-                .build();
-
-        httpAsyncClient.start();  // Start the client explicitly
-
-        ExchangeStrategies strategies = ExchangeStrategies.builder()
-                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
-                .build();
-
-        ServerOAuth2AuthorizedClientExchangeFilterFunction oauth2Client =
-                new ServerOAuth2AuthorizedClientExchangeFilterFunction(authorizedClientManager);
-        oauth2Client.setDefaultClientRegistrationId("my-client");
-
-        return WebClient.builder()
-                .clientConnector(new HttpComponentsClientHttpConnector(httpAsyncClient))
-                .filter(oauth2Client)
-                .exchangeStrategies(strategies)
-                .baseUrl("https://api.example.com") // Replace with your base URL
-                .build();
-    }
-
-    @Bean
-    public ReactiveOAuth2AuthorizedClientManager authorizedClientManager(
-            ReactiveClientRegistrationRepository clientRegistrationRepository,
-            ServerOAuth2AuthorizedClientRepository authorizedClientRepository) {
-
-        OAuth2AuthorizedClientProvider authorizedClientProvider =
-                OAuth2AuthorizedClientProviderBuilder.builder()
-                        .clientCredentials()
-                        .build();
-
-        AuthorizedClientServiceReactiveOAuth2AuthorizedClientManager authorizedClientManager =
-                new AuthorizedClientServiceReactiveOAuth2AuthorizedClientManager(
-                        clientRegistrationRepository, authorizedClientRepository);
-        authorizedClientManager.setAuthorizedClientProvider(authorizedClientProvider);
-
-        return authorizedClientManager;
-    }
-
-    @Bean
-    public ServerOAuth2AuthorizedClientRepository authorizedClientRepository() {
-        return new WebSessionServerOAuth2AuthorizedClientRepository();
+    public Mono<String> getSecuredData() {
+        return webClient.get()
+                .uri(BASE_URL + "/data")
+                .header(API_KEY_HEADER, API_KEY)
+                .retrieve()
+                .bodyToMono(String.class);
     }
 }
