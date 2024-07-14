@@ -1,43 +1,60 @@
 import java.util.HashMap;
 import java.util.Map;
 
-public class MTMessageParser {
+public class SwiftMTParser {
 
     public static void main(String[] args) {
-        String message = "{1:F01BANKBEBBAXXX0000000000}{2:O1031255000003BANKDEFFXXXX2222123456000003}{4:" +
-                ":20:1234567890123456" +
-                ":23B:CRED" +
-                ":32A:210112EUR1000," +
-                ":50K:/123456789" +
-                "JOHN DOE" +
-                "123 MAIN ST" +
-                "CITY COUNTRY" +
-                ":59:/987654321" +
-                "JANE DOE" +
-                "456 ANOTHER ST" +
-                "CITY COUNTRY" +
+        String mtMessage = "{1:F01BANKBEBBAXXX2222123456}{2:I103BANKDEFFXXXXN}{4:\n" +
+                ":20:1234567890\n" +
+                ":32A:210312EUR1000,\n" +
+                ":50K:/123456789\n" +
+                "JOHN DOE\n" +
+                ":59:/123456789\n" +
+                "JANE DOE\n" +
+                ":71A:SHA\n" +
                 "-}";
 
-        Map<String, String> parsedFields = parseMTMessage(message);
-        
-        parsedFields.forEach((k, v) -> System.out.println(k + ": " + v));
+        MTMessage parsedMessage = parseSwiftMT(mtMessage);
+        printParsedMessage(parsedMessage);
     }
 
-    private static Map<String, String> parseMTMessage(String message) {
-        Map<String, String> fields = new HashMap<>();
-        String[] parts = message.split("\\{4\\}|-\\}");
+    public static MTMessage parseSwiftMT(String message) {
+        MTMessage mtMessage = new MTMessage();
 
-        if (parts.length > 1) {
-            String[] fieldLines = parts[1].split(":");
-            for (int i = 1; i < fieldLines.length; i++) {
-                String field = fieldLines[i];
-                if (field.length() > 2) {
-                    String fieldCode = field.substring(0, 2);
-                    String fieldValue = field.substring(2).trim();
-                    fields.put(fieldCode, fieldValue);
+        String[] blocks = message.split("}");
+        for (String block : blocks) {
+            if (block.startsWith("{1:")) {
+                mtMessage.setBasicHeader(block.substring(3));
+            } else if (block.startsWith("{2:")) {
+                mtMessage.setApplicationHeader(block.substring(3));
+            } else if (block.startsWith("{4:")) {
+                String[] lines = block.substring(3).split("\n");
+                String currentTag = null;
+                StringBuilder currentValue = new StringBuilder();
+                for (String line : lines) {
+                    if (line.startsWith(":")) {
+                        if (currentTag != null) {
+                            mtMessage.addField(currentTag, currentValue.toString());
+                        }
+                        int index = line.indexOf(':', 1);
+                        currentTag = line.substring(1, index);
+                        currentValue = new StringBuilder(line.substring(index + 1));
+                    } else {
+                        currentValue.append('\n').append(line);
+                    }
+                }
+                if (currentTag != null) {
+                    mtMessage.addField(currentTag, currentValue.toString());
                 }
             }
         }
-        return fields;
+
+        return mtMessage;
+    }
+
+    public static void printParsedMessage(MTMessage message) {
+        System.out.println("Basic Header: " + message.getBasicHeader());
+        System.out.println("Application Header: " + message.getApplicationHeader());
+        message.getFields().forEach((tag, value) -> System.out.println(tag + ": " + value));
     }
 }
