@@ -1,45 +1,35 @@
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientExchangeFilterFunction;
-import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientManager;
-import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientRepository;
-import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientProvider;
-import org.springframework.security.oauth2.client.web.server.DefaultOAuth2AuthorizedClientManager;
-import org.springframework.security.oauth2.client.web.server.WebSessionServerOAuth2AuthorizedClientRepository;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.ClientRequest;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
+import reactor.core.publisher.Mono;
 
-@Configuration
-public class WebClientConfig {
+import java.util.logging.Logger;
 
-    @Bean
-    public WebClient.Builder webClientBuilder(ServerOAuth2AuthorizedClientManager authorizedClientManager) {
-        return WebClient.builder()
-            .apply(oauth2Configuration(authorizedClientManager));
+public class WebClientLoggingFilter {
+
+    private static final Logger LOGGER = Logger.getLogger(WebClientLoggingFilter.class.getName());
+
+    public static ExchangeFilterFunction logRequest() {
+        return ExchangeFilterFunction.ofRequestProcessor(request -> {
+            logRequestDetails(request);
+            return Mono.just(request);
+        });
     }
 
-    @Bean
-    public ServerOAuth2AuthorizedClientManager authorizedClientManager(
-            ServerOAuth2AuthorizedClientRepository authorizedClientRepository) {
-        ServerOAuth2AuthorizedClientProvider authorizedClientProvider =
-                ServerOAuth2AuthorizedClientProviderBuilder.builder()
-                        .authorizationCode()
-                        .refreshToken()
-                        .build();
-
-        return new DefaultOAuth2AuthorizedClientManager(
-                authorizedClientRepository,
-                authorizedClientProvider
-        );
+    public static ExchangeFilterFunction logResponse() {
+        return ExchangeFilterFunction.ofResponseProcessor(response -> {
+            logResponseDetails(response);
+            return Mono.just(response);
+        });
     }
 
-    @Bean
-    public ServerOAuth2AuthorizedClientRepository authorizedClientRepository() {
-        return new WebSessionServerOAuth2AuthorizedClientRepository();
+    private static void logRequestDetails(ClientRequest request) {
+        LOGGER.info("Request: " + request.method() + " " + request.url());
+        request.headers().forEach((name, values) -> values.forEach(value -> LOGGER.info(name + ": " + value)));
     }
 
-    private Consumer<WebClient.Builder> oauth2Configuration(
-            ServerOAuth2AuthorizedClientManager authorizedClientManager) {
-        return builder -> builder
-            .apply(ServerOAuth2AuthorizedClientExchangeFilterFunction.oauth2Configuration(authorizedClientManager));
+    private static void logResponseDetails(ClientResponse response) {
+        LOGGER.info("Response status: " + response.statusCode());
+        response.headers().asHttpHeaders().forEach((name, values) -> values.forEach(value -> LOGGER.info(name + ": " + value)));
     }
 }
